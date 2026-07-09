@@ -6,13 +6,13 @@ chapter : false
 pre : " <b> 5.5. </b> "
 ---
 
-#### AI workflow overview
+#### AI Workflow overview
 
-In this section, the **AI Workflow** of the **AI AWS Architecture Reviewer** project is implemented using **Amazon EventBridge**, **AWS Step Functions**, **AWS Lambda**, **Amazon Bedrock**, **AWS Price List API**, **Amazon S3**, and **Amazon DynamoDB**.
+In this section, the **AI Workflow** of the **AI AWS Architecture Reviewer** project is built using **Amazon EventBridge**, **AWS Step Functions**, **AWS Lambda**, **Amazon Bedrock**, **AWS Price List API**, **Amazon S3**, **Amazon DynamoDB**, **Amazon CloudWatch**, and **AWS IAM**.
 
-After a user uploads an AWS architecture diagram through the upload backend, the file is stored in the S3 Input Bucket. The S3 object creation event is then sent to EventBridge, which automatically starts the Step Functions workflow.
+After the user uploads an AWS architecture diagram through the upload backend, the file is stored in the **S3 Input Bucket**. The S3 object creation event is sent to **Amazon EventBridge**. EventBridge then automatically triggers **AWS Step Functions** to start the architecture analysis process.
 
-The AI Workflow analyzes the uploaded architecture image, detects AWS services, estimates monthly cost, generates the final review report, stores the report in S3, and updates the review history in DynamoDB.
+The AI Workflow is responsible for analyzing the uploaded architecture image, detecting AWS services, estimating monthly cost, generating the final review report, storing the report in S3, and updating the review history in DynamoDB.
 
 The AI Workflow flow is:
 
@@ -43,44 +43,24 @@ Amazon S3 Report Bucket
 Amazon DynamoDB
 Amazon CloudWatch
 AWS IAM
+Lambda Layer
 ```
 
-The source code and configuration files used in this AI Workflow are stored in the following README folder:
-
-```text
-README/ai-workflow/
-```
-
-This keeps the workshop page clean while still allowing readers to review the actual JSON definitions, Lambda environment variables, and testing commands.
+In this section, short configurations such as **environment variables**, **EventBridge pattern**, **Step Functions definition**, **IAM permissions**, and **test commands** are written directly in the workshop page. The long source code of the Lambda functions is stored separately in the README folder to keep the workshop page clean.
 
 <details>
-<summary><strong>README folder structure</strong></summary>
+<summary><strong>README folder structure for Lambda source code</strong></summary>
 
 ```text
 README/
 └── ai-workflow/
-    ├── eventbridge/
-    │   ├── eventbridge-rule-pattern.json
-    │   ├── input-transformer-paths.json
-    │   └── input-transformer-template.json
-    ├── step-functions/
-    │   └── architecture-review-workflow.asl.json
-    ├── lambdas/
-    │   ├── ai-analyzer/
-    │   │   ├── lambda_function.py
-    │   │   └── environment.txt
-    │   ├── cost-tool/
-    │   │   ├── lambda_function.py
-    │   │   └── environment.txt
-    │   └── pdf-generator/
-    │       ├── lambda_function.py
-    │       └── environment.txt
-    ├── layers/
-    │   └── reportlab-layer-structure.txt
-    ├── dynamodb/
-    │   └── completed-review-example.json
-    └── testing/
-        └── test-upload-command.md
+    └── lambdas/
+        ├── ai-analyzer/
+        │   └── lambda_function.py
+        ├── cost-tool/
+        │   └── lambda_function.py
+        └── pdf-generator/
+            └── lambda_function.py
 ```
 
 </details>
@@ -88,9 +68,9 @@ README/
 ---
 
 <details>
-<summary><strong>Step 1: Enable EventBridge notification on S3 Input Bucket</strong></summary>
+<summary><strong>Step 1: Enable EventBridge notification for the S3 Input Bucket</strong></summary>
 
-The AI Workflow starts when a new architecture diagram is uploaded to the S3 Input Bucket.
+The AI Workflow starts when a new architecture diagram is uploaded to the S3 Input Bucket. The upload backend stores the file in the input bucket using an object key that includes the `reviewId`, so the later steps can use this `reviewId` to track the entire analysis process.
 
 The S3 Input Bucket used in this project is:
 
@@ -98,7 +78,7 @@ The S3 Input Bucket used in this project is:
 ai-aws-reviewer-input-bucket-tiersteam
 ```
 
-Uploaded architecture diagrams are stored using the following object key pattern:
+Uploaded architecture files are stored using the following key structure:
 
 ```text
 uploads/{reviewId}/{fileName}
@@ -110,41 +90,63 @@ Example:
 uploads/REV-0491BC4A/architecture-diagram.jpg
 ```
 
-To allow S3 events to be sent to Amazon EventBridge, enable EventBridge notification on the S3 Input Bucket.
-
-Open the S3 Input Bucket, go to **Properties**, and enable:
+Configure this in the AWS Console:
 
 ```text
-Amazon EventBridge
+1. Select the ap-southeast-1 region.
+2. Go to Amazon S3.
+3. Open the bucket ai-aws-reviewer-input-bucket-tiersteam.
+4. Select the Properties tab.
+5. Find the Amazon EventBridge section.
+6. Choose Edit.
+7. Enable Send notifications to Amazon EventBridge for all events in this bucket.
+8. Choose Save changes.
 ```
 
-This allows object creation events in the bucket to be routed to EventBridge.
+After enabling this option, new object creation events in the bucket can be routed to EventBridge.
 
-![S3 EventBridge](/images/5-Workshop/5.5-AI-workflow/s3-input-bucket-eventbridge.png)
+![S3 EventBridge](/images/5-Workshop/5.6-AI-workflow/s3-input-bucket-eventbridge.png)
 
 </details>
 
 ---
 
 <details>
-<summary><strong>Step 2: Create EventBridge rule for S3 object creation</strong></summary>
+<summary><strong>Step 2: Create an EventBridge rule for the S3 Object Created event</strong></summary>
 
-Create an EventBridge rule to capture new uploaded files from the S3 Input Bucket.
+The EventBridge rule is used to capture the event when a new file is uploaded to the S3 Input Bucket. When a new object is created, the rule triggers Step Functions to start the AI Workflow.
 
-The rule listens for the following event type:
-
-```text
-Object Created
-```
-
-The event pattern used in this project is stored in the README folder instead of being pasted directly into the workshop page.
+Configure this in the AWS Console:
 
 ```text
-README/ai-workflow/eventbridge/eventbridge-rule-pattern.json
+1. Go to Amazon EventBridge.
+2. Select Rules.
+3. Choose Create rule.
+4. Enter the rule name.
+5. Select default as the event bus.
+6. Select Rule with an event pattern as the rule type.
+7. Choose Next.
 ```
 
-<details>
-<summary><strong>View EventBridge event pattern</strong></summary>
+The rule name used in this project is:
+
+```text
+ai-aws-reviewer-s3-object-created-rule
+```
+
+In the Event source section, select:
+
+```text
+AWS events or EventBridge partner events
+```
+
+In the Creation method section, select:
+
+```text
+Custom pattern JSON editor
+```
+
+Paste the following event pattern:
 
 ```json
 {
@@ -158,20 +160,35 @@ README/ai-workflow/eventbridge/eventbridge-rule-pattern.json
 }
 ```
 
-</details>
+Meaning of the pattern:
 
-This rule is triggered whenever a new file is uploaded to the input bucket.
+```text
+source = aws.s3:
+Only receive events from Amazon S3.
 
-![EventBridge Rule](/images/5-Workshop/5.5-AI-workflow/eventbridge-rule.png)
+detail-type = Object Created:
+Only receive events when a new object is created.
+
+bucket.name:
+Only receive events from the project input bucket.
+```
+
+After completing the configuration, choose:
+
+```text
+Next
+```
+
+![EventBridge Rule](/images/5-Workshop/5.6-AI-workflow/eventbridge-rule.png)
 
 </details>
 
 ---
 
 <details>
-<summary><strong>Step 3: Configure EventBridge target</strong></summary>
+<summary><strong>Step 3: Configure the EventBridge target as Step Functions</strong></summary>
 
-The target of the EventBridge rule is the Step Functions state machine.
+The target of the EventBridge rule is the Step Functions state machine. When a new file is uploaded to S3, EventBridge calls `StartExecution` to run the state machine.
 
 The Step Functions workflow used in this project is:
 
@@ -179,17 +196,19 @@ The Step Functions workflow used in this project is:
 Architecture-review-workflow
 ```
 
-EventBridge passes the uploaded file information to Step Functions by using an input transformer.
-
-The input transformer files are stored in the README folder:
+Configure the target:
 
 ```text
-README/ai-workflow/eventbridge/input-transformer-paths.json
-README/ai-workflow/eventbridge/input-transformer-template.json
+1. In the Select target step of the EventBridge rule, set Target type to AWS service.
+2. In Select a target, choose Step Functions state machine.
+3. Select the state machine Architecture-review-workflow.
+4. In Execution role, create a new role or select an existing role with states:StartExecution permission.
+5. Open Additional settings.
+6. Select Configure target input.
+7. Select Input transformer.
 ```
 
-<details>
-<summary><strong>View EventBridge input transformer</strong></summary>
+The input transformer extracts the bucket name and object key from the S3 event, then passes a cleaner JSON input to Step Functions.
 
 Input paths:
 
@@ -210,25 +229,48 @@ Input template:
 }
 ```
 
-</details>
+Example input received by Step Functions:
 
-This input allows the AI Analyzer Lambda to locate and read the uploaded architecture diagram from S3.
+```json
+{
+  "bucket": "ai-aws-reviewer-input-bucket-tiersteam",
+  "key": "uploads/REV-0491BC4A/architecture-diagram.jpg",
+  "region": "ap-southeast-1"
+}
+```
 
-![EventBridge Target](/images/5-Workshop/5.5-AI-workflow/eventbridge-target-step-functions.png)
+This input allows the AI Analyzer Lambda to identify the correct bucket and object key to read the uploaded architecture diagram from S3.
+
+![EventBridge Target](/images/5-Workshop/5.6-AI-workflow/eventbridge-target-step-functions.png)
 
 </details>
 
 ---
 
 <details>
-<summary><strong>Step 4: Create the Step Functions AI workflow</strong></summary>
+<summary><strong>Step 4: Create the Step Functions AI Workflow</strong></summary>
 
-Create an AWS Step Functions state machine to control the full AI review process.
+Step Functions is used to orchestrate the entire architecture analysis process. Instead of manually invoking each Lambda function, Step Functions allows the workflow to run in the correct order and makes it easier to monitor the status of each step.
 
 The workflow name is:
 
 ```text
 Architecture-review-workflow
+```
+
+Create the state machine:
+
+```text
+1. Go to AWS Step Functions.
+2. Select State machines.
+3. Choose Create state machine.
+4. Select Write your workflow in code.
+5. Set Type to Standard.
+6. Set Definition language to JSON.
+7. Name the state machine Architecture-review-workflow.
+8. Select or create an IAM role for Step Functions.
+9. Enable logging if you want to monitor executions in CloudWatch.
+10. Choose Create state machine.
 ```
 
 The workflow contains three main processing stages:
@@ -239,40 +281,45 @@ EstimateCost
 GenerateReport
 ```
 
-The responsibility of each state is:
+The role of each state:
 
 ```text
 AnalyzeArchitectureWithAI:
-Read the uploaded diagram from S3 and use Amazon Bedrock to analyze the architecture.
+Read the architecture diagram from S3 and use Amazon Bedrock to analyze the architecture.
 
 EstimateCost:
-Use detected AWS services to estimate monthly cost with AWS Price List API.
+Use the detected AWS services to estimate cost with AWS Price List API.
 
 GenerateReport:
-Generate the final review report, save it to S3, and update DynamoDB review history.
+Generate the final review report, store the report in S3, and update the review history in DynamoDB.
 ```
 
-![Step Functions](/images/5-Workshop/5.5-AI-workflow/architecture-review-workflow.png)
+The workflow also includes a Choice state named `HasDetectedServices`. If the AI Analyzer does not detect any AWS service, the workflow skips the cost estimation step and moves directly to report generation with cost set to 0.
+
+![Step Functions](/images/5-Workshop/5.6-AI-workflow/architecture-review-workflow.png)
 
 </details>
 
 ---
 
 <details>
-<summary><strong>Step 5: Configure Step Functions definition</strong></summary>
+<summary><strong>Step 5: Configure the Step Functions definition</strong></summary>
 
-The Step Functions workflow invokes each Lambda function in order.
+After creating the state machine, paste the Amazon States Language definition into the Step Functions code editor.
 
-The main workflow definition is saved in the README folder:
+Configure this in the AWS Console:
 
 ```text
-README/ai-workflow/step-functions/architecture-review-workflow.asl.json
+1. Open the state machine Architecture-review-workflow.
+2. Choose Edit.
+3. Select Definition.
+4. Remove the sample definition if it exists.
+5. Paste the JSON definition below.
+6. Check the ARNs of the three Lambda functions.
+7. Choose Save.
 ```
 
-This file contains the Amazon States Language definition used by Step Functions. During implementation, copy the content of this file into the Step Functions definition editor.
-
-<details>
-<summary><strong>View Step Functions definition</strong></summary>
+The workflow definition used in this project is:
 
 ```json
 {
@@ -354,9 +401,17 @@ This file contains the Amazon States Language definition used by Step Functions.
 }
 ```
 
-</details>
+After saving, check the graph view. A correct graph should include the following states:
 
-![Step Functions Definition](/images/5-Workshop/5.5-AI-workflow/step-functions-definition.png)
+```text
+AnalyzeArchitectureWithAI
+HasDetectedServices
+SetEmptyCost
+EstimateCost
+GenerateReport
+```
+
+![Step Functions Definition](/images/5-Workshop/5.6-AI-workflow/step-functions-definition.png)
 
 </details>
 
@@ -365,7 +420,7 @@ This file contains the Amazon States Language definition used by Step Functions.
 <details>
 <summary><strong>Step 6: Create the AI Analyzer Lambda</strong></summary>
 
-Create a Lambda function to analyze the uploaded architecture diagram.
+The AI Analyzer Lambda is the first step in Step Functions. This Lambda receives the bucket and object key from EventBridge, reads the architecture image in S3, and sends the image to Amazon Bedrock for analysis.
 
 The Lambda function name is:
 
@@ -373,54 +428,79 @@ The Lambda function name is:
 aws-reviewer-ai-analyzer
 ```
 
-This function is responsible for:
+Create the Lambda function:
 
 ```text
-Receiving S3 bucket and object key from Step Functions.
-Reading the uploaded architecture diagram from S3.
-Sending the image to Amazon Bedrock.
-Detecting AWS services and connections from the diagram.
-Generating an initial AWS Well-Architected assessment.
-Returning structured JSON output to Step Functions.
+1. Go to AWS Lambda.
+2. Choose Create function.
+3. Select Author from scratch.
+4. Enter aws-reviewer-ai-analyzer as the function name.
+5. Select Python 3.14 or the runtime used in the project.
+6. Select x86_64 as the architecture.
+7. Select an execution role with S3 GetObject, Bedrock InvokeModel, and CloudWatch Logs permissions.
+8. Choose Create function.
 ```
 
-The AI Analyzer Lambda uses Amazon Bedrock Nova model to analyze the architecture image.
-
-Example environment variables are stored in:
+After creating the function, configure general settings:
 
 ```text
-README/ai-workflow/lambdas/ai-analyzer/environment.txt
+Memory: 1024 MB
+Timeout: 120 seconds
 ```
 
-<details>
-<summary><strong>View AI Analyzer environment variables</strong></summary>
+Configure environment variables:
 
 ```text
 MODEL_ID = global.amazon.nova-2-lite-v1:0
 BEDROCK_REGION = ap-southeast-1
 ```
 
-</details>
-
-The Lambda source code can be stored in:
+The long Lambda source code is stored in:
 
 ```text
 README/ai-workflow/lambdas/ai-analyzer/lambda_function.py
 ```
 
-The output of this Lambda includes:
+After copying the code into Lambda, choose:
+
+```text
+Deploy
+```
+
+This function is responsible for:
+
+```text
+Receiving the S3 bucket and object key from Step Functions.
+Reading the uploaded architecture diagram from S3.
+Sending the architecture image to Amazon Bedrock.
+Detecting AWS services and connections in the diagram.
+Creating an initial AWS Well-Architected Framework assessment.
+Returning structured JSON data to Step Functions.
+```
+
+The main output of this Lambda includes:
 
 ```text
 Review ID
 Source bucket
 Source object key
 Detected AWS services
-Detected service connections
-Well-Architected review result
-Limitations
+Service connections
+Well-Architected assessment result
+Analysis limitations
 ```
 
-![AI Analyzer Lambda](/images/5-Workshop/5.5-AI-workflow/aws-reviewer-ai-analyzer.png)
+You can test the Lambda with this sample event:
+
+```json
+{
+  "bucket": "ai-aws-reviewer-input-bucket-tiersteam",
+  "key": "uploads/REV-0491BC4A/architecture-diagram.jpg",
+  "region": "ap-southeast-1"
+}
+```
+
+![AI Analyzer Lambda](/images/5-Workshop/5.6-AI-workflow/aws-reviewer-ai-analyzer.png)
 
 </details>
 
@@ -429,7 +509,7 @@ Limitations
 <details>
 <summary><strong>Step 7: Create the Cost Tool Lambda</strong></summary>
 
-Create a Lambda function to estimate monthly cost based on the detected AWS services.
+The Cost Tool Lambda is the second step in the workflow. This Lambda receives the list of AWS services detected by the AI Analyzer and calculates the estimated monthly cost.
 
 The Lambda function name is:
 
@@ -437,27 +517,27 @@ The Lambda function name is:
 aws-reviewer-cost-tool
 ```
 
-This function is responsible for:
+Create the Lambda function:
 
 ```text
-Receiving detected services from the AI Analyzer Lambda.
-Mapping detected services to AWS pricing products.
-Calling AWS Price List API to retrieve pricing information.
-Calculating estimated monthly cost using default assumptions.
-Using Amazon Bedrock to generate cost analysis and optimization suggestions.
-Returning cost result to Step Functions.
+1. Go to AWS Lambda.
+2. Choose Create function.
+3. Select Author from scratch.
+4. Enter aws-reviewer-cost-tool as the function name.
+5. Select Python 3.14 or the runtime used in the project.
+6. Select x86_64 as the architecture.
+7. Select an execution role with Pricing API, Bedrock InvokeModel, and CloudWatch Logs permissions.
+8. Choose Create function.
 ```
 
-The Cost Tool does not allow AI to invent pricing values. Instead, the numeric cost is calculated from AWS Price List API data, while Amazon Bedrock is only used to explain the cost result and provide optimization recommendations.
-
-Example environment variables are stored in:
+Configure general settings:
 
 ```text
-README/ai-workflow/lambdas/cost-tool/environment.txt
+Memory: 1024 MB
+Timeout: 120 seconds
 ```
 
-<details>
-<summary><strong>View Cost Tool environment variables</strong></summary>
+Configure environment variables:
 
 ```text
 MODEL_ID = global.amazon.nova-2-lite-v1:0
@@ -465,26 +545,66 @@ BEDROCK_REGION = ap-southeast-1
 DEFAULT_REGION = ap-southeast-1
 ```
 
-</details>
-
-The Lambda source code can be stored in:
+The long Lambda source code is stored in:
 
 ```text
 README/ai-workflow/lambdas/cost-tool/lambda_function.py
 ```
 
-The output of this Lambda includes:
+After copying the code into Lambda, choose:
+
+```text
+Deploy
+```
+
+This function is responsible for:
+
+```text
+Receiving the detected services from the AI Analyzer Lambda.
+Mapping detected services to corresponding AWS Pricing products.
+Calling AWS Price List API to retrieve pricing information.
+Calculating estimated monthly cost based on default assumptions.
+Using Amazon Bedrock to generate cost analysis and optimization recommendations.
+Returning the cost result to Step Functions.
+```
+
+The Cost Tool does not allow AI to invent pricing values. The numeric cost is calculated from AWS Price List API data, while Amazon Bedrock is only used to explain the cost result and provide optimization recommendations.
+
+You can test the Lambda with this sample event:
+
+```json
+{
+  "review_id": "REV-0491BC4A",
+  "region": "ap-southeast-1",
+  "services": [
+    {
+      "name": "Amazon EC2",
+      "category": "Compute",
+      "confidence": 0.95,
+      "evidence": "Detected from architecture diagram"
+    },
+    {
+      "name": "Amazon S3",
+      "category": "Storage",
+      "confidence": 0.93,
+      "evidence": "Detected from architecture diagram"
+    }
+  ]
+}
+```
+
+The main output of this Lambda includes:
 
 ```text
 Estimated monthly cost
 Currency
 Cost breakdown by service
-Pricing source
+Pricing data source
 Default usage assumptions
 Cost optimization recommendations
 ```
 
-![Cost Tool Lambda](/images/5-Workshop/5.5-AI-workflow/aws-reviewer-cost-tool.png)
+![Cost Tool Lambda](/images/5-Workshop/5.6-AI-workflow/aws-reviewer-cost-tool.png)
 
 </details>
 
@@ -493,7 +613,7 @@ Cost optimization recommendations
 <details>
 <summary><strong>Step 8: Create the S3 Report Bucket</strong></summary>
 
-Create an S3 bucket to store generated review reports.
+The S3 Report Bucket is used to store the report files after the AI Workflow is completed. The PDF Generator Lambda uploads `report-data.json`, `report.html`, and `report.pdf` to this bucket.
 
 The S3 Report Bucket used in this project is:
 
@@ -501,7 +621,21 @@ The S3 Report Bucket used in this project is:
 ai-aws-reviewer-report-bucket-tiersteam
 ```
 
-The generated reports are stored using the following key pattern:
+Create the bucket:
+
+```text
+1. Go to Amazon S3.
+2. Choose Create bucket.
+3. Select ap-southeast-1 as the region.
+4. Enter ai-aws-reviewer-report-bucket-tiersteam as the bucket name.
+5. Keep Object Ownership as ACLs disabled.
+6. Keep Block Public Access enabled if reports are accessed only through the backend or presigned URLs.
+7. Enable Bucket Versioning if you want to keep multiple report versions.
+8. Set Encryption to Server-side encryption with Amazon S3 managed keys (SSE-S3).
+9. Choose Create bucket.
+```
+
+Reports are stored using this key structure:
 
 ```text
 reports/{reviewId}/report-data.json
@@ -517,9 +651,20 @@ reports/REV-0491BC4A/report.html
 reports/REV-0491BC4A/report.pdf
 ```
 
-The report bucket stores the final output of the AI Workflow.
+Meaning of each file:
 
-![S3 Report Bucket](/images/5-Workshop/5.5-AI-workflow/s3-report-bucket.png)
+```text
+report-data.json:
+Stores structured review data in JSON format.
+
+report.html:
+Stores the HTML report, which is easy to open in a browser.
+
+report.pdf:
+Stores the final PDF report for download or submission.
+```
+
+![S3 Report Bucket](/images/5-Workshop/5.6-AI-workflow/s3-report-bucket.png)
 
 </details>
 
@@ -528,7 +673,7 @@ The report bucket stores the final output of the AI Workflow.
 <details>
 <summary><strong>Step 9: Create the PDF Generator Lambda</strong></summary>
 
-Create a Lambda function to generate the final architecture review report.
+The PDF Generator Lambda is the final step in the AI Workflow. This Lambda receives the architecture analysis result and cost result from Step Functions, then generates the final report and updates the review history in DynamoDB.
 
 The Lambda function name is:
 
@@ -536,27 +681,27 @@ The Lambda function name is:
 aws-reviewer-pdf-generator
 ```
 
-This function is responsible for:
+Create the Lambda function:
 
 ```text
-Receiving analysis result and cost result from Step Functions.
-Using Amazon Bedrock to generate the final review content.
-Creating report-data.json.
-Creating report.html.
-Creating report.pdf using ReportLab.
-Uploading generated reports to the S3 Report Bucket.
-Updating review history in DynamoDB.
-Returning report file locations to Step Functions.
+1. Go to AWS Lambda.
+2. Choose Create function.
+3. Select Author from scratch.
+4. Enter aws-reviewer-pdf-generator as the function name.
+5. Select Python 3.14 as the runtime.
+6. Select x86_64 as the architecture.
+7. Select an execution role with S3 PutObject, DynamoDB UpdateItem, Bedrock InvokeModel, and CloudWatch Logs permissions.
+8. Choose Create function.
 ```
 
-Example environment variables are stored in:
+Configure general settings:
 
 ```text
-README/ai-workflow/lambdas/pdf-generator/environment.txt
+Memory: 1024 MB
+Timeout: 180 seconds
 ```
 
-<details>
-<summary><strong>View PDF Generator environment variables</strong></summary>
+Configure environment variables:
 
 ```text
 REPORT_BUCKET = ai-aws-reviewer-report-bucket-tiersteam
@@ -565,69 +710,355 @@ MODEL_ID = global.amazon.nova-2-lite-v1:0
 BEDROCK_REGION = ap-southeast-1
 ```
 
-</details>
-
-The Lambda source code can be stored in:
+The long Lambda source code is stored in:
 
 ```text
 README/ai-workflow/lambdas/pdf-generator/lambda_function.py
 ```
 
+After copying the code into Lambda, choose:
+
+```text
+Deploy
+```
+
+This function is responsible for:
+
+```text
+Receiving the architecture analysis result and cost result from Step Functions.
+Using Amazon Bedrock to generate the final review content.
+Creating report-data.json.
+Creating report.html.
+Creating report.pdf with ReportLab.
+Uploading the report files to the S3 Report Bucket.
+Updating the review history in DynamoDB.
+Returning the report file locations to Step Functions.
+```
+
+You can test the Lambda with this sample event:
+
+```json
+{
+  "analysis": {
+    "status": "ANALYZED",
+    "review_id": "REV-TEST-PDF",
+    "source": {
+      "region": "ap-southeast-1"
+    },
+    "architecture_json": {
+      "services": [
+        {
+          "name": "Amazon S3",
+          "category": "Storage",
+          "confidence": 0.95,
+          "evidence": "Detected from architecture diagram"
+        }
+      ],
+      "connections": []
+    },
+    "well_architected_review": {
+      "overall_score": 80,
+      "pillar_scores": {},
+      "findings": []
+    }
+  },
+  "cost": {
+    "status": "COST_ESTIMATED",
+    "review_id": "REV-TEST-PDF",
+    "currency": "USD",
+    "estimated_monthly_cost": 1.25,
+    "breakdown": [],
+    "cost_ai_review": {
+      "summary": "Estimated demo cost is low.",
+      "cost_level": "Low",
+      "main_cost_drivers": [],
+      "optimization_recommendations": []
+    }
+  }
+}
+```
+
 The PDF Generator Lambda is the final state of the AI Workflow.
 
-![PDF Generator Lambda](/images/5-Workshop/5.5-AI-workflow/aws-reviewer-pdf-generator.png)
+![PDF Generator Lambda](/images/5-Workshop/5.6-AI-workflow/aws-reviewer-pdf-generator.png)
 
 </details>
 
 ---
 
 <details>
-<summary><strong>Step 10: Configure ReportLab layer for PDF generation</strong></summary>
+<summary><strong>Step 10: Configure the ReportLab Layer for PDF generation</strong></summary>
 
-To generate PDF reports inside Lambda, a Lambda Layer is used to provide the ReportLab library.
+To generate PDF files inside Lambda, the system uses a **Lambda Layer** to provide **ReportLab**, **Pillow**, and Vietnamese-supported fonts. This layer is attached to the `aws-reviewer-pdf-generator` Lambda so the function can import ReportLab and generate the `report.pdf` file.
 
-The layer includes:
-
-```text
-ReportLab library
-Required Python dependencies
-Vietnamese-supported fonts
-```
-
-The layer structure is stored in:
+In this project, the PDF Generator Lambda uses:
 
 ```text
-README/ai-workflow/layers/reportlab-layer-structure.txt
+Region: ap-southeast-1
+Runtime: Python 3.14
+Architecture: x86_64
+Layer name: reportlab-layer-py314-vn
 ```
 
-<details>
-<summary><strong>View ReportLab layer structure</strong></summary>
+##### 10.1. Open CloudShell in the correct region
+
+In the AWS Console, select the region:
+
+```text
+ap-southeast-1
+```
+
+Then open:
+
+```text
+CloudShell
+```
+
+CloudShell is used to install ReportLab, Pillow, and package them into a `.zip` file using the correct Lambda Layer structure.
+
+##### 10.2. Create the layer folder and install ReportLab
+
+Run the following commands in CloudShell:
+
+```bash
+mkdir -p reportlab-layer-py314/python
+
+python3 -m pip install --upgrade pip
+
+python3 -m pip install \
+  --platform manylinux2014_x86_64 \
+  --implementation cp \
+  --python-version 3.14 \
+  --abi cp314 \
+  --only-binary=:all: \
+  --target reportlab-layer-py314/python \
+  reportlab pillow
+```
+
+Meaning of the main options:
+
+```text
+--platform manylinux2014_x86_64 : builds packages for the Lambda Linux x86_64 environment
+--python-version 3.14          : builds for the Python 3.14 runtime
+--abi cp314                    : uses the ABI that matches Python 3.14
+--target                       : installs the libraries into the python/ folder of the Lambda Layer
+```
+
+After the installation is completed, move into the layer folder:
+
+```bash
+cd reportlab-layer-py314
+```
+
+##### 10.3. Create the fonts folder and add Vietnamese fonts
+
+ReportLab does not display Vietnamese text correctly when using only the default fonts. Therefore, the layer needs a Unicode font such as **DejaVuSans**.
+
+Create the `fonts` folder:
+
+```bash
+mkdir -p fonts
+```
+
+Copy DejaVuSans fonts into the `fonts` folder:
+
+```bash
+cp /usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf fonts/
+cp /usr/share/fonts/dejavu-sans-fonts/DejaVuSans-Bold.ttf fonts/
+```
+
+After copying the fonts, check the folder:
+
+```bash
+ls -l fonts
+```
+
+Expected result:
+
+```text
+DejaVuSans.ttf
+DejaVuSans-Bold.ttf
+```
+
+If CloudShell cannot find the font path above, search for the fonts again:
+
+```bash
+find /usr/share/fonts -iname "DejaVuSans*.ttf"
+```
+
+Then use the correct path returned by the `find` command to copy the fonts into the `fonts` folder.
+
+##### 10.4. Package the Lambda Layer
+
+After the `python` and `fonts` folders are ready, create the zip file:
+
+```bash
+zip -r reportlab-layer-py314-vn.zip python fonts
+```
+
+The zip file structure should look like this:
 
 ```text
 python/
   reportlab/
+  PIL/
   ...
 fonts/
   DejaVuSans.ttf
   DejaVuSans-Bold.ttf
 ```
 
-</details>
+When Lambda attaches this layer, the font files will be available at:
 
-The fonts are used to display Vietnamese text correctly in PDF reports.
+```text
+/opt/fonts/DejaVuSans.ttf
+/opt/fonts/DejaVuSans-Bold.ttf
+```
 
-After creating the layer, attach it to the PDF Generator Lambda.
+The PDF Generator Lambda uses these paths to register Vietnamese fonts in ReportLab.
 
-![ReportLab Layer](/images/5-Workshop/5.5-AI-workflow/reportlab-layer.png)
+##### 10.5. Download the layer file from CloudShell
+
+In CloudShell, choose:
+
+```text
+Actions → Download file
+```
+
+Enter the file path:
+
+```text
+reportlab-layer-py314/reportlab-layer-py314-vn.zip
+```
+
+Then choose:
+
+```text
+Download
+```
+
+The file to download is:
+
+```text
+reportlab-layer-py314-vn.zip
+```
+
+##### 10.6. Create a new Lambda Layer
+
+Go to the AWS Console:
+
+```text
+Lambda → Layers → Create layer
+```
+
+Enter the layer information:
+
+```text
+Name: reportlab-layer-py314-vn
+Upload: reportlab-layer-py314-vn.zip
+Compatible runtime: Python 3.14
+Compatible architecture: x86_64
+```
+
+Then choose:
+
+```text
+Create
+```
+
+![ReportLab Layer](/images/5-Workshop/5.6-AI-workflow/reportlab-layer.png)
+
+##### 10.7. Attach the layer to the PDF Generator Lambda
+
+Open the PDF Generator Lambda:
+
+```text
+Lambda → aws-reviewer-pdf-generator → Code → Layers
+```
+
+Choose:
+
+```text
+Add a layer
+```
+
+Then select:
+
+```text
+Custom layers → reportlab-layer-py314-vn → Latest version → Add
+```
+
+After attaching the layer, save the Lambda configuration.
+
+##### 10.8. Configure the code to use Vietnamese fonts
+
+In the `aws-reviewer-pdf-generator` Lambda, ReportLab must register the font before building the PDF.
+
+The font paths in Lambda are:
+
+```text
+/opt/fonts/DejaVuSans.ttf
+/opt/fonts/DejaVuSans-Bold.ttf
+```
+
+Example code to register the fonts:
+
+```python
+def register_vietnamese_fonts():
+    regular_font_path = "/opt/fonts/DejaVuSans.ttf"
+    bold_font_path = "/opt/fonts/DejaVuSans-Bold.ttf"
+
+    pdfmetrics.registerFont(TTFont("DejaVuSans", regular_font_path))
+    pdfmetrics.registerFont(TTFont("DejaVuSans-Bold", bold_font_path))
+
+    return {
+        "regular": "DejaVuSans",
+        "bold": "DejaVuSans-Bold"
+    }
+```
+
+ReportLab styles should use this font instead of the default font:
+
+```python
+styles.add(ParagraphStyle(
+    name="VNBody",
+    parent=styles["BodyText"],
+    fontName="DejaVuSans",
+    fontSize=10,
+    leading=14
+))
+```
+
+##### 10.9. Verify the PDF after attaching the layer
+
+After attaching the layer and deploying the code, test the `aws-reviewer-pdf-generator` Lambda again.
+
+Expected output:
+
+```json
+{
+  "reportlab_available": true,
+  "pdf_status": "PDF_GENERATED",
+  "pdf_report_s3_uri": "s3://ai-aws-reviewer-report-bucket-tiersteam/reports/REV-TEST-PDF/report.pdf"
+}
+```
+
+Then open the S3 Report Bucket and check the PDF file:
+
+```text
+reports/{reviewId}/report.pdf
+```
+
+If the PDF displays Vietnamese characters such as `đ`, `ư`, `ế`, `ệ`, and `ộ` correctly, the Vietnamese font configuration is successful.
 
 </details>
 
 ---
 
 <details>
-<summary><strong>Step 11: Update DynamoDB review history</strong></summary>
+<summary><strong>Step 11: Update review history in DynamoDB</strong></summary>
 
-After the report is generated successfully, the PDF Generator Lambda updates the review item in DynamoDB.
+After the report is generated successfully, the PDF Generator Lambda updates the review item in DynamoDB. This update allows the frontend to display the review result instead of only showing the `uploaded` status.
 
 The DynamoDB table used in this project is:
 
@@ -641,42 +1072,51 @@ The partition key is:
 reviewId
 ```
 
+DynamoDB update process:
+
+```text
+1. Upload Lambda creates a new item with status = uploaded.
+2. EventBridge triggers Step Functions.
+3. Step Functions runs AI Analyzer, Cost Tool, and PDF Generator.
+4. PDF Generator generates the report successfully.
+5. PDF Generator calls DynamoDB UpdateItem.
+6. The item is updated with status = completed.
+```
+
 When the upload backend creates a new review item, the initial status is:
 
 ```text
 uploaded
 ```
 
-After the AI Workflow finishes, the PDF Generator Lambda updates the status to:
+After the AI Workflow is completed, the PDF Generator Lambda updates the status to:
 
 ```text
 completed
 ```
 
-The updated review item includes:
+Fields updated after completion:
 
 ```text
-Review status
-Completed date
-Updated date
-Architecture score
-Detected AWS services
-Well-Architected result
-Cost result
-Recommendations
-Risks
-Best practices
-Report file locations
+status
+completedDate
+updatedAt
+score
+architectureType
+detectedServices
+wellArchitectedResult
+costResult
+recommendations
+risks
+bestPractices
+reportFiles
+htmlReportS3Key
+pdfReportS3Key
+finalReview
+analysisStatus
 ```
 
-The example updated item is stored in:
-
-```text
-README/ai-workflow/dynamodb/completed-review-example.json
-```
-
-<details>
-<summary><strong>View completed DynamoDB item example</strong></summary>
+Example DynamoDB item after completion:
 
 ```json
 {
@@ -691,17 +1131,29 @@ README/ai-workflow/dynamodb/completed-review-example.json
   "bestPractices": [],
   "costResult": {},
   "reportFiles": {
+    "jsonReportS3Key": "reports/REV-0491BC4A/report-data.json",
     "htmlReportS3Key": "reports/REV-0491BC4A/report.html",
-    "pdfReportS3Key": "reports/REV-0491BC4A/report.pdf"
+    "pdfReportS3Key": "reports/REV-0491BC4A/report.pdf",
+    "pdfStatus": "PDF_GENERATED"
   }
 }
 ```
 
-</details>
+Check this in DynamoDB:
+
+```text
+1. Go to Amazon DynamoDB.
+2. Select Tables.
+3. Open the AIArchitectureReviews table.
+4. Select Explore table items.
+5. Search for the corresponding reviewId, for example REV-0491BC4A.
+6. Check that the status has changed to completed.
+7. Check the reportFiles, score, costResult, and recommendations fields.
+```
 
 This update allows the React frontend to display review history and completed analysis results.
 
-![DynamoDB Updated Review](/images/5-Workshop/5.5-AI-workflow/dynamodb-review-completed.png)
+![DynamoDB Updated Review](/images/5-Workshop/5.6-AI-workflow/dynamodb-review-completed.png)
 
 </details>
 
@@ -710,43 +1162,208 @@ This update allows the React frontend to display review history and completed an
 <details>
 <summary><strong>Step 12: Configure IAM permissions</strong></summary>
 
-Each Lambda function and Step Functions workflow requires an IAM role with the correct permissions.
+Each Lambda function, Step Functions workflow, and EventBridge target needs an IAM role with the correct permissions. IAM is important because if a permission is missing, the workflow may run until a certain step and then fail with `AccessDenied`.
 
-The AI Analyzer Lambda requires permission to:
-
-```text
-Read objects from S3 Input Bucket
-Invoke Amazon Bedrock model
-Write logs to CloudWatch
-```
-
-The Cost Tool Lambda requires permission to:
+How to add an inline policy to each role:
 
 ```text
-Call AWS Price List API
-Invoke Amazon Bedrock model
-Write logs to CloudWatch
+1. Go to IAM.
+2. Select Roles.
+3. Open the role that needs to be configured.
+4. Choose Add permissions.
+5. Choose Create inline policy.
+6. Select the JSON tab.
+7. Paste the corresponding policy.
+8. Choose Next.
+9. Enter a policy name.
+10. Choose Create policy.
 ```
 
-The PDF Generator Lambda requires permission to:
+##### 12.1. IAM policy for AI Analyzer Lambda
 
-```text
-Write reports to S3 Report Bucket
-Update DynamoDB review history
-Invoke Amazon Bedrock model
-Write logs to CloudWatch
+The AI Analyzer Lambda needs permission to read files from the S3 Input Bucket, invoke Amazon Bedrock, and write logs to CloudWatch.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadInputBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject"
+      ],
+      "Resource": "arn:aws:s3:::ai-aws-reviewer-input-bucket-tiersteam/*"
+    },
+    {
+      "Sid": "InvokeBedrockModel",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "WriteCloudWatchLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
 ```
 
-The Step Functions role requires permission to:
+##### 12.2. IAM policy for Cost Tool Lambda
 
-```text
-Invoke AI Analyzer Lambda
-Invoke Cost Tool Lambda
-Invoke PDF Generator Lambda
-Write execution logs to CloudWatch
+The Cost Tool Lambda needs permission to call AWS Price List API, invoke Amazon Bedrock, and write logs to CloudWatch.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowPricingApi",
+      "Effect": "Allow",
+      "Action": [
+        "pricing:GetProducts",
+        "pricing:DescribeServices",
+        "pricing:GetAttributeValues"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "InvokeBedrockModel",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "WriteCloudWatchLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
 ```
 
-![IAM Roles](/images/5-Workshop/5.5-AI-workflow/ai-workflow-iam-roles.png)
+##### 12.3. IAM policy for PDF Generator Lambda
+
+The PDF Generator Lambda needs permission to write reports to the S3 Report Bucket, update DynamoDB, invoke Amazon Bedrock, and write logs to CloudWatch.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "WriteReportBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject"
+      ],
+      "Resource": "arn:aws:s3:::ai-aws-reviewer-report-bucket-tiersteam/*"
+    },
+    {
+      "Sid": "UpdateReviewHistory",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:UpdateItem"
+      ],
+      "Resource": "arn:aws:dynamodb:ap-southeast-1:675492141438:table/AIArchitectureReviews"
+    },
+    {
+      "Sid": "InvokeBedrockModel",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "WriteCloudWatchLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+##### 12.4. IAM policy for Step Functions role
+
+The Step Functions role needs permission to invoke the three Lambda functions in the AI Workflow.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "InvokeWorkflowLambdas",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:InvokeFunction"
+      ],
+      "Resource": [
+        "arn:aws:lambda:ap-southeast-1:675492141438:function:aws-reviewer-ai-analyzer",
+        "arn:aws:lambda:ap-southeast-1:675492141438:function:aws-reviewer-cost-tool",
+        "arn:aws:lambda:ap-southeast-1:675492141438:function:aws-reviewer-pdf-generator"
+      ]
+    },
+    {
+      "Sid": "WriteStepFunctionsLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogDelivery",
+        "logs:GetLogDelivery",
+        "logs:UpdateLogDelivery",
+        "logs:DeleteLogDelivery",
+        "logs:ListLogDeliveries",
+        "logs:PutResourcePolicy",
+        "logs:DescribeResourcePolicies",
+        "logs:DescribeLogGroups"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+##### 12.5. IAM policy for EventBridge target role
+
+EventBridge needs permission to start execution of the Step Functions state machine.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "StartAIWorkflowExecution",
+      "Effect": "Allow",
+      "Action": [
+        "states:StartExecution"
+      ],
+      "Resource": "arn:aws:states:ap-southeast-1:675492141438:stateMachine:Architecture-review-workflow"
+    }
+  ]
+}
+```
+
+![IAM Roles](/images/5-Workshop/5.6-AI-workflow/ai-workflow-iam-roles.png)
 
 </details>
 
@@ -755,24 +1372,21 @@ Write execution logs to CloudWatch
 <details>
 <summary><strong>Step 13: Test the AI Workflow</strong></summary>
 
-To test the full AI Workflow, upload an architecture diagram from the frontend or use the upload API.
+To test the full AI Workflow, upload an architecture diagram from the frontend or use the upload API. When the upload succeeds, S3 generates an Object Created event, EventBridge captures the event, and Step Functions starts automatically.
 
-The test upload command is stored in:
+Prepare an architecture image file on your local machine:
 
 ```text
-README/ai-workflow/testing/test-upload-command.md
+D:\Learning\AWS\test-files\architecture-1.png
 ```
 
-<details>
-<summary><strong>View test upload command</strong></summary>
+Test upload with PowerShell:
 
 ```powershell
 curl.exe -X POST "https://031hqksomd.execute-api.ap-southeast-1.amazonaws.com/upload" -F "file=@D:\Learning\AWS\test-files\architecture-1.png"
 ```
 
-</details>
-
-If the upload is successful, the API returns a review ID:
+If the upload succeeds, the API returns a review ID:
 
 ```json
 {
@@ -785,9 +1399,19 @@ If the upload is successful, the API returns a review ID:
 }
 ```
 
-After the file is uploaded to S3, EventBridge automatically starts the Step Functions workflow.
+After receiving the review ID, check the workflow in this order:
 
-Open Step Functions and verify that all states are completed successfully:
+```text
+1. Go to the S3 Input Bucket.
+2. Check that the file exists under uploads/{reviewId}/.
+3. Go to the EventBridge rule and check the Matched events metric.
+4. Go to Step Functions.
+5. Open the state machine Architecture-review-workflow.
+6. Select the latest execution.
+7. Check the Graph view.
+```
+
+The following states should complete successfully:
 
 ```text
 AnalyzeArchitectureWithAI
@@ -795,7 +1419,9 @@ EstimateCost
 GenerateReport
 ```
 
-![Step Functions Success](/images/5-Workshop/5.5-AI-workflow/step-functions-execution-success.png)
+If a state fails, open the `Input` and `Output` tabs of that state to inspect the input data and returned error.
+
+![Step Functions Success](/images/5-Workshop/5.6-AI-workflow/step-functions-execution-success.png)
 
 </details>
 
@@ -804,9 +1430,15 @@ GenerateReport
 <details>
 <summary><strong>Step 14: Verify generated reports in S3</strong></summary>
 
-After the Step Functions execution is completed, open the S3 Report Bucket.
+After the Step Functions execution is completed, the PDF Generator Lambda stores the report files in the S3 Report Bucket.
 
-The generated files should be stored under:
+Open the S3 Report Bucket:
+
+```text
+ai-aws-reviewer-report-bucket-tiersteam
+```
+
+The report files are stored under this prefix:
 
 ```text
 reports/{reviewId}/
@@ -820,22 +1452,59 @@ reports/REV-0491BC4A/report.html
 reports/REV-0491BC4A/report.pdf
 ```
 
-The `report-data.json` file stores structured review data.
+Verify the files:
 
-The `report.html` file stores a browser-readable report.
+```text
+1. Go to Amazon S3.
+2. Open the bucket ai-aws-reviewer-report-bucket-tiersteam.
+3. Open the reports folder.
+4. Open the folder with the reviewId, for example REV-0491BC4A.
+5. Check that report-data.json, report.html, and report.pdf are all available.
+6. Open or download report.pdf to check the report content.
+```
 
-The `report.pdf` file stores the final PDF report.
+Meaning of each file:
 
-![Generated Reports](/images/5-Workshop/5.5-AI-workflow/s3-generated-reports.png)
+```text
+report-data.json:
+Stores structured review data, suitable for frontend or backend reuse.
+
+report.html:
+Stores the HTML report, which displays well in the browser.
+
+report.pdf:
+Stores the final PDF report, which can be downloaded or used in the demo result.
+```
+
+![Generated Reports](/images/5-Workshop/5.6-AI-workflow/s3-generated-reports.png)
 
 </details>
 
 ---
 
 <details>
-<summary><strong>Step 15: Verify completed review in DynamoDB</strong></summary>
+<summary><strong>Step 15: Verify the completed review in DynamoDB</strong></summary>
 
-Open the DynamoDB table and verify that the review item has been updated.
+DynamoDB stores the review history and processing status. After the workflow is completed, the PDF Generator Lambda must update the item that matches the `reviewId`.
+
+Open the DynamoDB table:
+
+```text
+AIArchitectureReviews
+```
+
+Verify the item:
+
+```text
+1. Go to Amazon DynamoDB.
+2. Select Tables.
+3. Open the AIArchitectureReviews table.
+4. Select Explore table items.
+5. Search for the reviewId you just uploaded, for example REV-0491BC4A.
+6. Check the status field.
+7. Check completedDate and updatedAt.
+8. Check reportFiles, costResult, detectedServices, and recommendations.
+```
 
 The review status should change from:
 
@@ -849,20 +1518,37 @@ to:
 completed
 ```
 
-The item should also include report file information, cost result, detected services, recommendations, risks, and best practices.
+Important fields that should exist:
 
-![DynamoDB Completed Review](/images/5-Workshop/5.5-AI-workflow/dynamodb-completed-review.png)
+```text
+status = completed
+score
+architectureType
+detectedServices
+wellArchitectedResult
+costResult
+recommendations
+risks
+bestPractices
+reportFiles
+completedDate
+updatedAt
+```
+
+If the item is still in the `uploaded` state, check the CloudWatch Logs of the PDF Generator Lambda. Common causes are a missing `TABLE_NAME` environment variable or missing `dynamodb:UpdateItem` permission.
+
+![DynamoDB Completed Review](/images/5-Workshop/5.6-AI-workflow/dynamodb-completed-review.png)
 
 </details>
 
 ---
 
 <details>
-<summary><strong>Step 16: Verify review history on frontend</strong></summary>
+<summary><strong>Step 16: Verify review history on the frontend</strong></summary>
 
-The React frontend reads review history from the backend API.
+The React frontend reads review history from the upload backend API. After the PDF Generator updates DynamoDB, the frontend can display the completed review status and analysis result.
 
-The review history API routes are:
+The API routes used for review history are:
 
 ```text
 GET /reviews
@@ -870,7 +1556,19 @@ GET /reviews/{reviewId}
 GET /reviews/{reviewId}/status
 ```
 
-After the AI Workflow completes, the frontend can display:
+Verify on the frontend:
+
+```text
+1. Open the React frontend.
+2. Upload a new architecture diagram.
+3. Record the reviewId returned by the API.
+4. Wait for the AI Workflow to finish in Step Functions.
+5. Refresh the review history page.
+6. Check that the review status has changed to completed.
+7. Open the review detail page to view score, detected services, recommendations, and report links.
+```
+
+After the AI Workflow is completed, the frontend can display:
 
 ```text
 Review ID
@@ -884,7 +1582,7 @@ Risks
 Report links
 ```
 
-This completes the full upload and AI review process.
+This step completes the full upload and AI review process.
 
 ```text
 Upload Backend → S3 Input Bucket → EventBridge → Step Functions
@@ -892,7 +1590,7 @@ Upload Backend → S3 Input Bucket → EventBridge → Step Functions
 → S3 Report Bucket → DynamoDB → Frontend Review History
 ```
 
-![Frontend Review History](/images/5-Workshop/5.5-AI-workflow/frontend-review-history.png)
+![Frontend Review History](/images/5-Workshop/5.6-AI-workflow/frontend-review-history.png)
 
 </details>
 
@@ -900,19 +1598,19 @@ Upload Backend → S3 Input Bucket → EventBridge → Step Functions
 
 #### AI Workflow result
 
-After completing this section, the system can automatically process an uploaded AWS architecture diagram and generate a complete architecture review.
+After completing this section, the system can automatically process an uploaded AWS architecture diagram and generate a complete review report.
 
 The final result includes:
 
 ```text
 AI-based architecture analysis
 Detected AWS services
-AWS Well-Architected assessment
+AWS Well-Architected Framework assessment
 Estimated monthly cost
-Cost optimization suggestions
+Cost optimization recommendations
 HTML report
 PDF report
 Updated review history
 ```
 
-The AI Workflow makes the system fully automated after upload. Users only need to upload an architecture diagram, and the backend automatically performs analysis, cost estimation, report generation, and history update.
+The AI Workflow automates the entire process after upload. Users only need to upload an architecture diagram, and the backend automatically performs analysis, cost estimation, report generation, and review history update.
