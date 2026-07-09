@@ -1,4 +1,0 @@
-REPORT_BUCKET=ai-aws-reviewer-report-bucket-tiersteam
-TABLE_NAME=AIArchitectureReviews
-MODEL_ID=global.amazon.nova-2-lite-v1:0
-BEDROCK_REGION=ap-southeast-1

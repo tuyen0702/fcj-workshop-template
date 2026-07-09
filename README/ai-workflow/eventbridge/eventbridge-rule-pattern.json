@@ -1,9 +1,0 @@
-{
-  "source": ["aws.s3"],
-  "detail-type": ["Object Created"],
-  "detail": {
-    "bucket": {
-      "name": ["ai-aws-reviewer-input-bucket-tiersteam"]
-    }
-  }
-}

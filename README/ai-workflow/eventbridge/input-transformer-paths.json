@@ -1,4 +1,0 @@
-{
-  "bucket": "$.detail.bucket.name",
-  "key": "$.detail.object.key"
-}
