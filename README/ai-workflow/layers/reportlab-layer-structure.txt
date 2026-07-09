@@ -1,0 +1,6 @@
+python/
+  reportlab/
+  ...
+fonts/
+  DejaVuSans.ttf
+  DejaVuSans-Bold.ttf
