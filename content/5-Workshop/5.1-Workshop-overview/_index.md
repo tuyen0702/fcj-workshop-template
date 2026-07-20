@@ -24,7 +24,7 @@ In this workshop, the **AI AWS Architecture Reviewer** system will be built and 
 + **API and Upload Layer** uses Amazon API Gateway and AWS Lambda Upload Service to receive upload requests, validate architecture diagram files, create review IDs, store uploaded diagrams in the Amazon S3 Input Bucket, and store metadata in Amazon DynamoDB.
 + **Review Data Layer** uses Amazon DynamoDB to store review information such as review ID, file name, file type, file size, upload date, review status, S3 input bucket, S3 object key, report path, and review result information.
 + **Event-Driven Workflow Layer** uses Amazon EventBridge and AWS Step Functions to start the review workflow after a diagram is uploaded to the S3 Input Bucket. When S3 generates an Object Created Event, EventBridge captures this event and triggers the Step Functions Review Workflow.
-+ **AI Processing Layer** uses AWS Lambda Diagram Extractor and Amazon Bedrock. Lambda Diagram Extractor reads the uploaded diagram from the S3 Input Bucket, then sends the diagram to Amazon Bedrock so that Bedrock can identify AWS services, connections, text notes, and generate a structured architecture JSON.
++ **AI Processing Layer** uses AWS Lambda AI Analyze and Amazon Bedrock. Lambda AI Analyze reads the uploaded diagram from the S3 Input Bucket, then sends the diagram to Amazon Bedrock so that Bedrock can identify AWS services, connections, text notes, and generate a structured architecture JSON.
 + **Cost Analysis Layer** uses AWS Lambda Cost Tool to receive the architecture JSON, analyze the AWS services detected in the diagram, and estimate monthly cost based on demo-level usage assumptions.
 + **Final AI Review Layer** continues to use Amazon Bedrock to receive the architecture JSON and cost estimation result, then perform a comprehensive architecture review based on the AWS Well-Architected Framework, explain costs, identify risks, and recommend optimization improvements.
 + **Reporting and Notification Layer** uses AWS Lambda PDF Generator to create the PDF review report, Amazon S3 Report Bucket to store the generated report, and Amazon SNS to send an email notification after the review is completed.
@@ -32,4 +32,4 @@ In this workshop, the **AI AWS Architecture Reviewer** system will be built and 
 
 The architecture below shows the overall workflow of the AI AWS Architecture Reviewer system, from the user accessing the website, uploading a diagram, processing AI analysis, estimating cost, generating a report, storing review history, to sending an email notification.
 
-![AI AWS Architecture Reviewer Overview](/images/5-Workshop/5.1-Workshop-overview/ai-aws-architecture-reviewer-overview.png)
+![AI AWS Architecture Reviewer Overview](/images/5-Workshop/5.1-Workshop-overview/ai-aws-architecture-reviewer-overview.jpg)

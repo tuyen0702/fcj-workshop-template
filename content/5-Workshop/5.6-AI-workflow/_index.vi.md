@@ -1,9 +1,9 @@
 ---
 title : "Xây dựng AI Workflow với EventBridge, Step Functions, Bedrock và PDF Generator"
 date : 2026-07-08
-weight : 5
+weight : 6
 chapter : false
-pre : " <b> 5.5. </b> "
+pre : " <b> 5.6. </b> "
 ---
 
 #### Tổng quan AI Workflow

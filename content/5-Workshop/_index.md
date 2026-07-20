@@ -14,13 +14,13 @@ pre: " <b> 5. </b> "
 
 In this workshop, the system is implemented in stages, starting with frontend development, deploying the React website to Amazon S3 and Amazon CloudFront, building the upload backend using Amazon API Gateway and AWS Lambda, storing architecture diagrams in Amazon S3, storing review metadata and status in Amazon DynamoDB, and then expanding to an automated processing workflow using Amazon EventBridge and AWS Step Functions.
 
-In the AI processing stage, the system uses AWS Lambda Diagram Extractor to read the uploaded diagram from the Amazon S3 Input Bucket. Lambda Diagram Extractor sends the diagram to Amazon Bedrock so that Bedrock can identify AWS services, connections, text notes, and generate a structured architecture JSON. Then, the architecture JSON is sent to AWS Lambda Cost Tool to estimate the monthly cost. The cost estimation result together with the architecture JSON is sent back to Amazon Bedrock to perform a comprehensive architecture review based on the AWS Well-Architected Framework, explain the cost, and recommend optimizations.
+In the AI processing stage, the system uses AWS Lambda AI Analyze to read the uploaded diagram from the Amazon S3 Input Bucket. Lambda AI Analyze sends the diagram to Amazon Bedrock so that Bedrock can identify AWS services, connections, text notes, and generate a structured architecture JSON. Then, the architecture JSON is sent to AWS Lambda Cost Tool to estimate the monthly cost. The cost estimation result together with the architecture JSON is sent back to Amazon Bedrock to perform a comprehensive architecture review based on the AWS Well-Architected Framework, explain the cost, and recommend optimizations.
 
-After the analysis is completed, AWS Lambda PDF Generator creates a PDF report from the final review result, stores the report in the Amazon S3 Report Bucket, updates the review history in Amazon DynamoDB, and sends an email notification to the user through Amazon SNS. Amazon CloudWatch is used for logging, monitoring, and troubleshooting. AWS IAM is used to control access between services based on the principle of least privilege access.
+After the analysis is completed, AWS Lambda PDF Generator creates a PDF report from the final review result, stores the report in the Amazon S3 Report Bucket, and updates the review history in Amazon DynamoDB. Amazon CloudWatch is used to record logs, monitor metrics, and create alarms for important components such as Lambda, API Gateway, Step Functions, EventBridge, and DynamoDB. When an important error affects the system, CloudWatch Alarm sends an alert to an Amazon SNS Topic. Amazon SNS then distributes the alert email to the email addresses that have been subscribed and confirmed. AWS IAM is used to control access between services based on the principle of least privilege access.
 
 The project uses the following main AWS services: **Amazon S3, Amazon CloudFront, Amazon API Gateway, AWS Lambda, Amazon DynamoDB, Amazon EventBridge, AWS Step Functions, Amazon Bedrock, Amazon SNS, Amazon CloudWatch, and AWS IAM**.
 
-The main goal of this workshop is to document the process of deploying the website and backend services, explain how to configure each AWS service, and complete the AI-powered AWS architecture review workflow, including diagram analysis, architecture JSON generation, cost estimation, final architecture review, PDF report generation, notification, monitoring, and security.
+The main goal of this workshop is to document the process of deploying the website and backend services, explain how to configure each AWS service, and complete the AI-powered AWS architecture review workflow, including diagram analysis, architecture JSON generation, cost estimation, final architecture review, PDF report generation, CloudWatch monitoring, SNS alert notification, and security.
 
 ---
 
@@ -30,17 +30,17 @@ The architecture of **AI AWS Architecture Reviewer** is designed using a **serve
 
 When a user uploads an AWS architecture diagram, the request is sent from the frontend to Amazon API Gateway. API Gateway forwards the request to AWS Lambda Upload Service. Lambda Upload Service validates the uploaded file, creates a review ID, stores the diagram in the Amazon S3 Input Bucket, and writes the initial metadata to the Amazon DynamoDB Review Database.
 
-After the diagram file is stored in the S3 Input Bucket, Amazon S3 generates an Object Created Event. This event is sent to Amazon EventBridge. EventBridge uses the configured rule to start the AWS Step Functions Review Workflow. Step Functions is responsible for orchestrating the entire review processing flow, including extraction, cost estimation, AI review, PDF generation, result storage, and notification.
+After the diagram file is stored in the S3 Input Bucket, Amazon S3 generates an Object Created Event. This event is sent to Amazon EventBridge. EventBridge uses the configured rule to start the AWS Step Functions Review Workflow. Step Functions is responsible for orchestrating the entire review processing flow, including extraction, cost estimation, AI review, PDF generation, result storage, and error handling.
 
-In the Processing Layer, Step Functions calls AWS Lambda Diagram Extractor. Lambda Diagram Extractor reads the uploaded diagram from the S3 Input Bucket, then sends the diagram to Amazon Bedrock. At this step, Amazon Bedrock performs the initial diagram analysis to identify AWS services, connections, text notes, and architectural components. The returned result is a structured architecture JSON.
+In the Processing Layer, Step Functions calls AAWS Lambda AI Analyze. Lambda AI Analyze reads the uploaded diagram from the S3 Input Bucket, then sends the diagram to Amazon Bedrock. At this step, Amazon Bedrock performs the initial diagram analysis to identify AWS services, connections, text notes, and architectural components. The returned result is a structured architecture JSON.
 
-After the architecture JSON is generated, Lambda Diagram Extractor sends this data to AWS Lambda Cost Tool. Lambda Cost Tool analyzes the list of AWS services detected in the architecture JSON and estimates the monthly cost based on demo-level usage assumptions. The cost estimation result includes the list of services, usage assumptions, estimated costs, and components that may have a significant impact on the budget.
+After the architecture JSON is generated, Lambda AI Analyze sends this data to AWS Lambda Cost Tool. Lambda Cost Tool analyzes the list of AWS services detected in the architecture JSON and estimates the monthly cost based on demo-level usage assumptions. The cost estimation result includes the list of services, usage assumptions, estimated costs, and components that may have a significant impact on the budget.
 
 Next, the architecture JSON and cost estimation result are sent back to Amazon Bedrock to perform the final AI review. At this step, Amazon Bedrock evaluates the entire architecture based on the AWS Well-Architected Framework, including the pillars of Security, Reliability, Performance Efficiency, Cost Optimization, Operational Excellence, and Sustainability. Bedrock also explains the cost, identifies risks, and recommends architecture optimization improvements.
 
-After the final AI review is completed, AWS Lambda PDF Generator creates a PDF report from the analysis result. The report is stored in the Amazon S3 Report Bucket. Lambda PDF Generator also updates the review history and review status in Amazon DynamoDB. Finally, Amazon SNS sends an email notification to the user to inform them that the review process has been completed.
+After the final AI review is completed, AWS Lambda PDF Generator creates a PDF report from the analysis result. The report is stored in the Amazon S3 Report Bucket. Lambda PDF Generator also updates the review history, review status, and report information in Amazon DynamoDB. Amazon SNS is not used to send an email when each review is completed. Instead, Amazon SNS is integrated with Amazon CloudWatch Alarm to send operational alert emails when the system encounters errors, such as Step Functions failed executions, Lambda errors, API Gateway 5XX errors, DynamoDB throttling, or EventBridge failed invocations.
 
-![AI AWS Architecture Reviewer Workshop](/images/5-Workshop/ai-aws-architecture-reviewer-workshop.png)
+![AI AWS Architecture Reviewer Workshop](/images/5-Workshop/ai-aws-architecture-reviewer.png)
 
 ---
 
@@ -55,16 +55,16 @@ The system workflow includes the following steps:
 5. AWS Lambda Upload Service validates the upload request and stores the uploaded diagram in the Amazon S3 Input Bucket.
 6. Amazon S3 publishes an Object Created Event after the diagram is successfully uploaded.
 7. Amazon EventBridge receives the event and starts the AWS Step Functions Review Workflow.
-8. AWS Step Functions orchestrates the workflow and calls AWS Lambda Diagram Extractor to process the diagram.
-9. AWS Lambda Diagram Extractor sends the uploaded diagram to Amazon Bedrock so that Bedrock can identify AWS services, connections, text notes, and generate architecture JSON.
-10. AWS Lambda Diagram Extractor sends the architecture JSON to AWS Lambda Cost Tool to estimate the monthly cost.
+8. AWS Step Functions orchestrates the workflow and calls AWS Lambda AI Analyze to process the diagram.
+9. AWS Lambda AI Analyze sends the uploaded diagram to Amazon Bedrock so that Bedrock can identify AWS services, connections, text notes, and generate architecture JSON.
+10. AWS Lambda AI Analyze sends the architecture JSON to AWS Lambda Cost Tool to estimate the monthly cost.
 11. AWS Lambda Cost Tool sends the cost estimation result together with the architecture JSON to Amazon Bedrock to review the entire architecture, explain the cost, and recommend optimizations.
 12. AWS Lambda PDF Generator creates a PDF report from the final AI review result.
 13. AWS Lambda PDF Generator updates the review history and review status in the Amazon DynamoDB Review Database.
 14. AWS Lambda PDF Generator stores the generated PDF report in the Amazon S3 Report Bucket.
-15. Amazon SNS sends a review notification to the user after the review process is completed.
-16. Amazon CloudWatch records logs and metrics and supports troubleshooting for Lambda, API Gateway, Step Functions, and workflow execution.
-17. AWS IAM applies least privilege access between services across the entire system.
+15. Amazon CloudWatch records logs, monitors metrics, and creates alarms for important components such as Lambda, API Gateway, Step Functions, EventBridge, and DynamoDB.
+16. When CloudWatch Alarm detects an important error in the system, the alarm sends an alert to an Amazon SNS Topic.
+17. Amazon SNS sends error alert emails to the email addresses that have been subscribed and confirmed.
 
 ---
 
@@ -80,13 +80,13 @@ The main AWS services used in this workshop include:
 - **Amazon DynamoDB Review Database**: Stores metadata, review status, review history, uploaded file information, and PDF report paths.
 - **Amazon EventBridge**: Receives S3 Object Created Events and triggers the Step Functions Review Workflow.
 - **AWS Step Functions**: Orchestrates the entire review workflow, including diagram extraction, cost estimation, final AI review, PDF generation, and error handling.
-- **AWS Lambda Diagram Extractor**: Reads the uploaded diagram from the S3 Input Bucket and sends the diagram to Amazon Bedrock to generate architecture JSON.
+- **AWS Lambda AI Analyze**: Reads the uploaded diagram from the S3 Input Bucket and sends the diagram to Amazon Bedrock to generate architecture JSON.
 - **Amazon Bedrock**: Used in two stages. The first stage analyzes the diagram and generates architecture JSON. The second stage reviews the entire architecture based on the architecture JSON and cost estimation result.
 - **AWS Lambda Cost Tool**: Receives the architecture JSON, identifies AWS services in the diagram, and estimates monthly costs.
 - **AWS Lambda PDF Generator**: Creates a PDF report from the final AI review result, including architecture review, cost estimation, cost explanation, and optimization recommendations.
 - **Amazon S3 Report Bucket**: Stores PDF reports generated after the review process is completed.
-- **Amazon SNS**: Sends email notifications to users when the review process is completed.
-- **Amazon CloudWatch**: Records logs, monitors metrics, and supports troubleshooting for Lambda, API Gateway, and Step Functions.
+- **Amazon SNS**: Receives alerts from Amazon CloudWatch Alarm and sends system error notification emails to the email addresses that have been subscribed and confirmed. In this project, SNS is not used to send an email when each review is completed.
+- **Amazon CloudWatch**: Records logs, monitors metrics, creates CloudWatch Alarms, and supports troubleshooting for Lambda, API Gateway, Step Functions, EventBridge, and DynamoDB. When an alarm detects an important error, CloudWatch sends the alert to an Amazon SNS Topic.
 - **AWS IAM**: Controls access between services based on the principle of least privilege access.
 
 ---
@@ -165,8 +165,8 @@ The following parts will be implemented in the next phase of the project:
    - Configure retry and error handling in Step Functions.
    - Update the review status in DynamoDB when the workflow starts processing.
 
-2. **Build Lambda Diagram Extractor**
-   - Create AWS Lambda Diagram Extractor.
+2. **Build Lambda AI Analyze**
+   - Create AWS Lambda AI Analyze.
    - Receive bucket name, object key, and review ID from the Step Functions input.
    - Read the uploaded diagram from the Amazon S3 Input Bucket.
    - Check the diagram file type, such as image or draw.io XML.
@@ -196,7 +196,7 @@ The following parts will be implemented in the next phase of the project:
 
 4. **Build Lambda Cost Tool**
    - Create AWS Lambda Cost Tool.
-   - Receive architecture JSON from Lambda Diagram Extractor.
+   - Receive architecture JSON from Lambda AI Analyze.
    - Read the list of AWS services detected in the diagram.
    - Assign default usage assumptions for each service at demo scale.
    - Estimate monthly costs for key services such as S3, CloudFront, API Gateway, Lambda, DynamoDB, EventBridge, Step Functions, Bedrock, SNS, and CloudWatch.
@@ -249,18 +249,18 @@ The following parts will be implemented in the next phase of the project:
    - Update the report URL or report S3 key in DynamoDB.
    - Update the review status to `completed`.
 
-7. **Send Notification**
-   - Configure an Amazon SNS topic.
-   - Add an email subscription to the SNS topic.
-   - Confirm the email subscription.
-   - Send an email notification when the review process is completed.
-   - The email notification content should include:
-     - Review ID.
-     - Review status.
-     - Completion time.
-     - Review result summary.
-     - PDF report information.
-   - If the workflow fails, send a notification or update the failed status so that the user can check it on the frontend.
+7. **Configure CloudWatch Alarm and SNS Alert Notification**
+   - Configure an Amazon SNS Topic to receive alerts from CloudWatch Alarm.
+   - Add email subscriptions to the SNS Topic.
+   - Confirm email subscriptions to ensure that the emails can receive alerts.
+   - Configure CloudWatch Alarm for AWS Step Functions to detect failed, timed out, or aborted workflow executions.
+   - Configure CloudWatch Alarm for AWS Lambda functions to detect errors, throttles, and high duration.
+   - Configure CloudWatch Alarm for API Gateway to detect 5XX errors, 4XX errors, and high latency.
+   - Configure CloudWatch Alarm for DynamoDB to detect system errors and throttled requests.
+   - Configure CloudWatch Alarm for EventBridge to detect failed invocations.
+   - When CloudWatch Alarm changes to the ALARM state, the alert is sent to the SNS Topic.
+   - Amazon SNS then sends alert emails to the email addresses that have been subscribed and confirmed.
+   - SNS is used only for monitoring alerts, not for sending emails when each review is completed.
 
 8. **Monitoring and Security**
    - Use Amazon CloudWatch to monitor Lambda logs.
@@ -276,17 +276,6 @@ The following parts will be implemented in the next phase of the project:
    - Add retry logic and error handling in Step Functions.
    - Update the DynamoDB review status when the workflow fails.
 
-9. **Clean up**
-   - Delete test files in the S3 Input Bucket.
-   - Delete test PDF files in the S3 Report Bucket if they are no longer used.
-   - Delete test Lambda functions.
-   - Delete unused API Gateway routes.
-   - Delete test EventBridge rules.
-   - Delete test Step Functions workflows.
-   - Delete the SNS topic or email subscription if it is no longer used.
-   - Clean up CloudWatch logs if needed to reduce costs.
-   - Check the AWS Billing Dashboard to ensure that no unused resources continue generating unexpected costs.
-
 ---
 
 #### Expected Results After the Workshop
@@ -300,17 +289,17 @@ After completing the workshop, the system is expected to achieve the following r
 - S3 Object Created Event can trigger EventBridge.
 - EventBridge can start the Step Functions Review Workflow.
 - Step Functions can orchestrate the entire review processing flow.
-- Lambda Diagram Extractor can read uploaded diagrams and send them to Amazon Bedrock.
+- Lambda AI Analyze can read uploaded diagrams and send them to Amazon Bedrock.
 - Amazon Bedrock can generate architecture JSON from uploaded diagrams.
 - Lambda Cost Tool can estimate monthly costs based on architecture JSON.
 - Amazon Bedrock can review the overall architecture based on architecture JSON and cost estimation result.
 - Lambda PDF Generator can create a PDF report from the final AI review result.
 - The PDF report is stored in the Amazon S3 Report Bucket.
 - DynamoDB is updated with review history, review status, and report information.
-- Amazon SNS sends an email notification when the review is completed.
-- CloudWatch records logs and supports troubleshooting.
+- Amazon SNS sends alert emails when Amazon CloudWatch Alarm detects important errors in the system.
+- Amazon CloudWatch records logs, monitors metrics, creates alarms, and sends error alerts to the Amazon SNS Topic.
 - IAM permissions are reviewed based on the principle of least privilege access.
-- The system can run end-to-end from uploading a diagram to receiving the report and notification.
+- The system can run end-to-end from uploading a diagram to generating a PDF report, storing the report in S3, updating DynamoDB, and allowing users to download the PDF successfully.
 
 ---
 
@@ -322,6 +311,4 @@ After completing the workshop, the system is expected to achieve the following r
 4. [Build Upload Backend with API Gateway, Lambda, S3 and DynamoDB](5.4-Upload-backend/)
 5. [Integrate Review APIs and Frontend Pages](5.5-Review-api/)
 6. [Build Event-Driven AI Review Workflow](5.6-AI-workflow/)
-7. [Generate PDF Report and Send Notification](5.7-Reporting-notification/)
-8. [Monitoring, Security and IAM Least Privilege](5.8-Monitoring-security/)
-9. [Clean up](5.9-Cleanup/)
+7. [Monitoring with CloudWatch, SNS Alert and IAM Least Privilege](5.7-Monitoring-security/)

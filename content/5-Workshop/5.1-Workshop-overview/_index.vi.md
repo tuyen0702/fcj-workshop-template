@@ -24,7 +24,7 @@ Trong workshop này, hệ thống **AI AWS Architecture Reviewer** sẽ được
 + **API and Upload Layer** sử dụng Amazon API Gateway và AWS Lambda Upload Service để nhận upload request, validate file sơ đồ kiến trúc, tạo review ID, lưu uploaded diagrams vào Amazon S3 Input Bucket và lưu metadata vào Amazon DynamoDB.
 + **Review Data Layer** sử dụng Amazon DynamoDB để lưu thông tin review như review ID, file name, file type, file size, upload date, review status, S3 input bucket, S3 object key, report path và thông tin kết quả review.
 + **Event-Driven Workflow Layer** sử dụng Amazon EventBridge và AWS Step Functions để khởi động review workflow sau khi diagram được upload vào S3 Input Bucket. Khi S3 phát sinh Object Created Event, EventBridge sẽ bắt event này và kích hoạt Step Functions Review Workflow.
-+ **AI Processing Layer** sử dụng AWS Lambda Diagram Extractor và Amazon Bedrock. Lambda Diagram Extractor đọc uploaded diagram từ S3 Input Bucket, sau đó gửi diagram sang Amazon Bedrock để Bedrock nhận diện AWS services, connections, text notes và sinh ra architecture JSON có cấu trúc.
++ **AI Processing Layer** sử dụng AWS Lambda AI Analyze và Amazon Bedrock. Lambda AI Analyze đọc uploaded diagram từ S3 Input Bucket, sau đó gửi diagram sang Amazon Bedrock để Bedrock nhận diện AWS services, connections, text notes và sinh ra architecture JSON có cấu trúc.
 + **Cost Analysis Layer** sử dụng AWS Lambda Cost Tool để nhận architecture JSON, phân tích các AWS services được phát hiện trong sơ đồ và ước tính monthly cost dựa trên các giả định sử dụng ở mức demo.
 + **Final AI Review Layer** tiếp tục sử dụng Amazon Bedrock để nhận architecture JSON và cost estimation result, sau đó đánh giá tổng thể kiến trúc dựa trên AWS Well-Architected Framework, giải thích chi phí, phát hiện rủi ro và đề xuất các hướng tối ưu.
 + **Reporting and Notification Layer** sử dụng AWS Lambda PDF Generator để tạo PDF review report, Amazon S3 Report Bucket để lưu generated report và Amazon SNS để gửi email notification sau khi review hoàn tất.
@@ -32,4 +32,4 @@ Trong workshop này, hệ thống **AI AWS Architecture Reviewer** sẽ được
 
 Kiến trúc bên dưới thể hiện workflow tổng thể của hệ thống AI AWS Architecture Reviewer, từ bước người dùng truy cập website, upload diagram, xử lý AI analysis, ước tính chi phí, tạo report, lưu review history cho đến gửi email notification.
 
-![Tổng quan AI AWS Architecture Reviewer](/images/5-Workshop/5.1-Workshop-overview/ai-aws-architecture-reviewer-overview.png)
+![Tổng quan AI AWS Architecture Reviewer](/images/5-Workshop/5.1-Workshop-overview/ai-aws-architecture-reviewer-overview.jpg)
